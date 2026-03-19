@@ -1,0 +1,234 @@
+{
+  "realm": "open-certify",
+  "enabled": true,
+  "displayName": "Open Certify",
+  "displayNameHtml": "<div class=\"kc-logo-text\"><span>Open Certify</span></div>",
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "rememberMe": true,
+  "verifyEmail": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "failureFactor": 5,
+  "roles": {
+    "realm": [
+      {
+        "name": "aluno",
+        "description": "Usuário que realiza provas e obtém certificações"
+      },
+      {
+        "name": "avaliador",
+        "description": "Usuário que cria e gerencia provas"
+      },
+      {
+        "name": "admin",
+        "description": "Administrador da plataforma"
+      }
+    ]
+  },
+  "groups": [
+    {
+      "name": "Alunos",
+      "path": "/Alunos",
+      "realmRoles": ["aluno"]
+    },
+    {
+      "name": "Avaliadores",
+      "path": "/Avaliadores", 
+      "realmRoles": ["avaliador"]
+    },
+    {
+      "name": "Administradores",
+      "path": "/Administradores",
+      "realmRoles": ["admin"]
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "email": "admin@opencertify.com",
+      "firstName": "Admin",
+      "lastName": "User",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["admin"],
+      "groups": ["/Administradores"]
+    },
+    {
+      "username": "avaliador1",
+      "email": "avaliador@opencertify.com",
+      "firstName": "João",
+      "lastName": "Avaliador",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "avaliador123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["avaliador"],
+      "groups": ["/Avaliadores"]
+    },
+    {
+      "username": "aluno1",
+      "email": "aluno@opencertify.com",
+      "firstName": "Maria",
+      "lastName": "Aluna",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "aluno123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["aluno"],
+      "groups": ["/Alunos"]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "open-certify-frontend",
+      "name": "Open Certify Frontend",
+      "description": "Cliente para a aplicação frontend React",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "frontend-secret-key",
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://localhost:3000/*",
+        "http://localhost:8000/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:8000"
+      ],
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": true
+    },
+    {
+      "clientId": "open-certify-backend",
+      "name": "Open Certify Backend",
+      "description": "Cliente para a aplicação backend Node.js",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "backend-secret-key",
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": true,
+      "fullScopeAllowed": true,
+      "serviceAccountRealmRoles": ["admin"]
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "roles",
+      "description": "OpenID Connect scope for add user roles to the access token",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "foo",
+            "access.token.claim": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "multivalued": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "protocolMappers": [
+    {
+      "name": "email",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-property-mapper",
+      "consentRequired": false,
+      "config": {
+        "userinfo.token.claim": "true",
+        "user.attribute": "email",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "claim.name": "email",
+        "jsonType.label": "String"
+      }
+    },
+    {
+      "name": "given name",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-property-mapper",
+      "consentRequired": false,
+      "config": {
+        "userinfo.token.claim": "true",
+        "user.attribute": "firstName",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "claim.name": "given_name",
+        "jsonType.label": "String"
+      }
+    },
+    {
+      "name": "family name",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-property-mapper",
+      "consentRequired": false,
+      "config": {
+        "userinfo.token.claim": "true",
+        "user.attribute": "lastName",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "claim.name": "family_name",
+        "jsonType.label": "String"
+      }
+    }
+  ],
+  "browserFlow": "browser",
+  "registrationFlow": "registration",
+  "directGrantFlow": "direct grant",
+  "resetCredentialsFlow": "reset credentials",
+  "clientAuthenticationFlow": "clients",
+  "dockerAuthenticationFlow": "docker auth",
+  "attributes": {
+    "frontendUrl": "http://localhost:8080",
+    "userManagedAccessAllowed": false
+  },
+  "keycloakVersion": "22.0.0",
+  "userManagedAccessAllowed": false
+}
+

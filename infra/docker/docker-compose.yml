@@ -1,0 +1,196 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  # ─────────────────────────────────────────────
+  # Infraestrutura de dados
+  # ─────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: oc_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-open_certify}
+      POSTGRES_USER: ${POSTGRES_USER:-oc_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oc_pass}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oc_user} -d ${POSTGRES_DB:-open_certify}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - oc-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: oc_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-oc_redis_pass}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--pass", "${REDIS_PASSWORD:-oc_redis_pass}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - oc-network
+
+  # ─────────────────────────────────────────────
+  # Autenticação
+  # ─────────────────────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0
+    container_name: oc_keycloak
+    restart: unless-stopped
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-oc_kc_admin}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-open_certify}
+      KC_DB_USERNAME: ${POSTGRES_USER:-oc_user}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-oc_pass}
+      KC_DB_SCHEMA: keycloak
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./infra/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    command: start-dev --import-realm
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    networks:
+      - oc-network
+
+  # ─────────────────────────────────────────────
+  # Aplicação backend (monolito modular)
+  # ─────────────────────────────────────────────
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: oc_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-oc_user}:${POSTGRES_PASSWORD:-oc_pass}@postgres:5432/${POSTGRES_DB:-open_certify}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-oc_redis_pass}@redis:6379
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: open-certify
+      KEYCLOAK_CLIENT_ID: open-certify-backend
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-backend-secret-key}
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./apps/backend:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    networks:
+      - oc-network
+
+  # ─────────────────────────────────────────────
+  # Aplicação frontend
+  # ─────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: oc_frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:8000/api
+      VITE_KEYCLOAK_URL: http://localhost:8080
+      VITE_KEYCLOAK_REALM: open-certify
+      VITE_KEYCLOAK_CLIENT_ID: open-certify-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - oc-network
+
+  # ─────────────────────────────────────────────
+  # Proxy reverso
+  # ─────────────────────────────────────────────
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: oc_nginx
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - oc-network
+
+  # ─────────────────────────────────────────────
+  # Observabilidade
+  # ─────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: oc_prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - oc-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: oc_grafana
+    restart: unless-stopped
+    ports:
+      - "3002:3000"           # ← era 3001, conflitava com auth-service antigo
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-oc_grafana}
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - oc-network
+
+volumes:
+  postgres_data:
+  redis_data:          # ← adicionado para persistência do Redis
+  prometheus_data:
+  grafana_data:
+
+networks:
+  oc-network:
+    driver: bridge
